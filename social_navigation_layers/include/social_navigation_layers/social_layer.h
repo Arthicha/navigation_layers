@@ -39,6 +39,7 @@ protected:
   boost::recursive_mutex lock_;
   bool first_time_;
   double last_min_x_, last_min_y_, last_max_x_, last_max_y_;
+  double mark_x_, mark_y_;
 };
 }  // namespace social_navigation_layers
 

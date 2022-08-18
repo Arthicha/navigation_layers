@@ -15,6 +15,10 @@ double gaussian(double x, double y, double x0, double y0, double A, double varx,
 {
   double dx = x - x0, dy = y - y0;
   double h = sqrt(dx * dx + dy * dy);
+  /*if (h <= 0.2) return 1000.0;
+  if (h <= 0.5) return 100.0;
+  return 0.0;*/
+
   double angle = atan2(dy, dx);
   double mx = cos(angle - skew) * h;
   double my = sin(angle - skew) * h;
@@ -38,6 +42,29 @@ void ProxemicLayer::onInitialize()
   server_ = new dynamic_reconfigure::Server<ProxemicLayerConfig>(nh);
   f_ = boost::bind(&ProxemicLayer::configure, this, _1, _2);
   server_->setCallback(f_);
+
+  humanSub = nh.subscribe("/humanxy",1,&ProxemicLayer::humanxyCB,this);
+
+}
+
+void ProxemicLayer::humanxyCB(const std_msgs::Float32MultiArray::ConstPtr& array)
+{
+  int i = 0;
+  this->humanx.clear();
+  this->humany.clear();
+  float size = array->data.size()/2;
+    for(std::vector<float>::const_iterator it = array->data.begin(); it != array->data.end(); ++it)
+    {
+        if (i < size){
+          this->humanx.push_back(*it);
+        }
+        else{
+          this->humany.push_back(*it);
+        }
+
+        i++;
+    }
+    return;
 }
 
 void ProxemicLayer::updateBoundsFromPeople(double* min_x, double* min_y, double* max_x, double* max_y)
@@ -61,23 +88,29 @@ void ProxemicLayer::updateBoundsFromPeople(double* min_x, double* min_y, double*
 
 void ProxemicLayer::updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, int min_j, int max_i, int max_j)
 {
+  
+
+
+
   boost::recursive_mutex::scoped_lock lock(lock_);
   if (!enabled_) return;
 
-  if (people_list_.people.size() == 0)
+  /*if (people_list_.people.size() == 0)
     return;
   if (cutoff_ >= amplitude_)
-    return;
+    return;*/
 
   std::list<people_msgs::Person>::iterator p_it;
   costmap_2d::Costmap2D* costmap = layered_costmap_->getCostmap();
   double res = costmap->getResolution();
 
-  for (p_it = transformed_people_.begin(); p_it != transformed_people_.end(); ++p_it)
+  //for (p_it = transformed_people_.begin(); p_it != transformed_people_.end(); ++p_it)
+  for (int p_i = 0; p_i < (int)this->humanx.size(); p_i ++)
   {
-    people_msgs::Person person = *p_it;
-    double angle = atan2(person.velocity.y, person.velocity.x);
-    double mag = sqrt(pow(person.velocity.x, 2) + pow(person.velocity.y, 2));
+
+    //people_msgs::Person person = *p_it;
+    //double angle = 0.0;//atan2(person.velocity.y, person.velocity.x);
+    double mag = 0.0;//sqrt(pow(person.velocity.x, 2) + pow(person.velocity.y, 2));
     double factor = 1.0 + mag * factor_;
     double base = get_radius(cutoff_, amplitude_, covar_);
     double point = get_radius(cutoff_, amplitude_, covar_ * factor);
@@ -85,10 +118,13 @@ void ProxemicLayer::updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, i
     unsigned int width = std::max(1, static_cast<int>((base + point) / res)),
                  height = std::max(1, static_cast<int>((base + point) / res));
 
-    double cx = person.position.x, cy = person.position.y;
+    //double cx = person.position.x, cy = person.position.y;
+    double cx = this->humanx.at(p_i), cy = this->humany.at(p_i);
 
     double ox, oy;
-    if (sin(angle) > 0)
+    oy = cy - base;
+    ox = cx - base;
+    /*if (sin(angle) > 0)
       oy = cy - base;
     else
       oy = cy + (point - base) * sin(angle) - base;
@@ -96,8 +132,7 @@ void ProxemicLayer::updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, i
     if (cos(angle) >= 0)
       ox = cx - base;
     else
-      ox = cx + (point - base) * cos(angle) - base;
-
+      ox = cx + (point - base) * cos(angle) - base;*/
 
     int dx, dy;
     costmap->worldToMapNoBounds(ox, oy, dx, dy);
@@ -134,29 +169,24 @@ void ProxemicLayer::updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, i
           continue;
 
         double x = bx + i * res, y = by + j * res;
-        double ma = atan2(y - cy, x - cx);
-        double diff = angles::shortest_angular_distance(angle, ma);
         double a;
-        if (fabs(diff) < M_PI / 2)
-          a = gaussian(x, y, cx, cy, amplitude_, covar_ * factor, covar_, angle);
-        else
-          a = gaussian(x, y, cx, cy, amplitude_, covar_,       covar_, 0);
-
-        if (a < cutoff_)
-          continue;
+        a = gaussian(x, y, cx, cy, amplitude_, covar_,       covar_, 0);
+                
         unsigned char cvalue = (unsigned char) a;
+
         costmap->setCost(i + dx, j + dy, std::max(cvalue, old_cost));
       }
     }
   }
+  //cout << "------------------------" << endl;
 }
 
 void ProxemicLayer::configure(ProxemicLayerConfig &config, uint32_t level)
 {
-  cutoff_ = config.cutoff;
-  amplitude_ = config.amplitude;
-  covar_ = config.covariance;
-  factor_ = config.factor;
+  cutoff_ = 10.0;//config.cutoff;
+  amplitude_ = 254.0;//config.amplitude;
+  covar_ = 0.1;//config.covariance;
+  factor_ = 5.0;//config.factor;
   people_keep_time_ = ros::Duration(config.keep_time);
   enabled_ = config.enabled;
 }

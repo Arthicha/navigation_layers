@@ -103,5 +103,20 @@ void SocialLayer::updateBounds(double origin_x, double origin_y, double origin_z
     last_max_x_ = c;
     last_max_y_ = d;
   }
+
+  mark_x_ = origin_x + cos(origin_z);
+  
+  mark_y_ = origin_y + sin(origin_z);
+  
+  
+  *min_x = std::min(*min_x, mark_x_);
+  
+  *min_y = std::min(*min_y, mark_y_);
+  
+  *max_x = std::max(*max_x, mark_x_);
+  
+  *max_y = std::max(*max_y, mark_y_);
+
+
 }
 };  // namespace social_navigation_layers
